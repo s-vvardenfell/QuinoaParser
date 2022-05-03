@@ -1,28 +1,136 @@
 package kinopoisk
 
 import (
+	"bytes"
+	"fmt"
 	"log"
-	"os"
-	"path/filepath"
+	"net/http"
+	"net/http/cookiejar"
+	"parser/utility"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/sirupsen/logrus"
 )
 
+const timeout = 20
+const mainIrl = "https://www.kinopoisk.ru/"
+
 type Kinopoisk struct {
+	client *http.Client
+	token  string
 }
 
-// returns a list of releases by the given month
-func (kp *Kinopoisk) ReleasesByMonth(month int) []Film {
-	wd, err := os.Getwd()
+func New() *Kinopoisk {
+	jar, err := cookiejar.New(nil)
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatalf("got error while creating cookie jar, %v", err)
 	}
-	path := filepath.Join(filepath.Dir(wd), "parser/resources/Fiddler_19-57-29.htm")
-	// path := filepath.Join("../", "resources/Fiddler_19-57-29.htm")
-	f, _ := os.Open(path)
 
-	doc, err := goquery.NewDocumentFromReader(f)
+	var kp Kinopoisk
+	kp.client = &http.Client{
+		Jar:     jar,
+		Timeout: time.Second * time.Duration(timeout),
+	}
+	return &kp
+}
+
+// returns a list of releases filtred by the given month, coutry, genre
+func (kp *Kinopoisk) Releases(countries, genres []string, month int) []Film {
+	films := make([]Film, 0)
+	p := kp.releasesFirstPageAndToken(month)
+	films = append(films, kp.parseReleasesPage(p)...)
+
+	//приходит только первая страница, нужен дебаг в фиддлере
+	p = kp.releasesNextPage(month, 1)
+	films = append(films, kp.parseReleasesPage(p)...)
+
+	if countries == nil && genres == nil {
+		return films
+	}
+
+	res := make([]Film, 0)
+
+	for _, film := range films {
+
+		var matchByCountry, matchByGenre = true, true
+		if countries != nil {
+			matchByCountry = func() bool {
+				for _, c := range countries {
+					if strings.Contains(film.Country, c) {
+						return true
+					}
+				}
+				return false
+			}()
+		}
+
+		if genres != nil {
+			matchByGenre = func() bool {
+				for _, g := range genres {
+					if strings.Contains(film.Genre, g) {
+						return true
+					}
+				}
+				return false
+			}()
+		}
+
+		if matchByCountry && matchByGenre {
+			res = append(res, film)
+		}
+	}
+
+	return res
+}
+
+func (kp *Kinopoisk) releasesFirstPageAndToken(month int) []byte {
+	url := fmt.Sprintf("https://www.kinopoisk.ru/premiere/ru/2022/month/%d/", month)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		logrus.Fatalf("cannot create NewRequest to %s, %v", url, err)
+	}
+
+	resp, err := kp.client.Do(req)
+	if err != nil {
+		logrus.Fatalf("cannot get %s, %v", url, err)
+	}
+
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "_csrf_csrf_token" {
+			kp.token = cookie.Value
+		}
+	}
+	return utility.BytesFromReader(resp.Body)
+}
+
+func (kp *Kinopoisk) releasesNextPage(month, page int) []byte {
+	url := fmt.Sprintf("https://www.kinopoisk.ru/premiere/ru/2022/month/%d/", month)
+	body := fmt.Sprintf("token=%s&page=%d&ajax=true", kp.token, page)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(body)))
+	if err != nil {
+		logrus.Fatalf("cannot create NewRequest to %s, %v", url, err)
+	}
+
+	resp, err := kp.client.Do(req)
+	if err != nil {
+		logrus.Fatalf("cannot get %s, %v", url, err)
+	}
+	return utility.BytesFromReader(resp.Body)
+}
+
+func (kp *Kinopoisk) parseReleasesPage(page []byte) []Film {
+	// wd, err := os.Getwd()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// path := filepath.Join(filepath.Dir(wd), "parser/resources/Fiddler_19-57-29.htm")
+	// f, _ := os.Open(path)
+
+	// doc, err := goquery.NewDocumentFromReader(f)
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(page))
 	if err != nil {
 		log.Fatal(err)
 	}

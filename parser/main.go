@@ -7,8 +7,8 @@ import (
 
 func main() {
 	// cmd.Execute()
-	kp := kinopoisk.Kinopoisk{}
-	fmt.Println(kp.ReleasesByMonth(6))
+	kp := kinopoisk.New()
+	fmt.Println(kp.Releases([]string{"США"}, []string{"ужасы"}, 5))
 }
 
 /*
