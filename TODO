@@ -1,0 +1,21 @@
+microservices:
+parsing kp
+data base
+tg-bot-api
+
+m-ces use grpc
+
+other:
+gin-server
+    routing
+parser k
+parser i
+parser n
+custom middleware
+reading logs (grafana(?) etc)
+searcher mag-ref on z
+readme
+tests package
+tests e-to-e
+test coverage picture
+ci, picture
