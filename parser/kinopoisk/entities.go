@@ -1,5 +1,21 @@
 package kinopoisk
 
+import (
+	"encoding/json"
+
+	"github.com/sirupsen/logrus"
+)
+
+type Films []Film
+
+func (f *Films) ToJson() []byte {
+	jsData, err := json.Marshal(f)
+	if err != nil {
+		logrus.Fatal("cannot marshall parsed films to json")
+	}
+	return jsData
+}
+
 type Film struct {
 	Title         string
 	Country       string

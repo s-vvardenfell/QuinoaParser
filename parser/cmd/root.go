@@ -1,12 +1,9 @@
-/*
-Copyright © 2022 s.vvardenfell, hel0len53
-
-*/
 package cmd
 
 import (
 	"fmt"
 	"os"
+	"parser/kinopoisk"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
@@ -34,7 +31,9 @@ var rootCmd = &cobra.Command{
 	`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Quinoa works...")
+		fmt.Println("Parser started...")
+		kp := kinopoisk.New()
+		fmt.Println(kp.Releases([]string{"США"}, []string{"ужасы"}, 5))
 	},
 }
 
@@ -47,7 +46,8 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is resources/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile,
+		"config", "", "config file (default is resources/config.yaml)")
 }
 
 // initConfig reads in config file and ENV variables if set.

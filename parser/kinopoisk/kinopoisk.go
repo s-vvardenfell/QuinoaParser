@@ -37,8 +37,8 @@ func New() *Kinopoisk {
 }
 
 // returns a list of releases filtred by the given month, coutry, genre
-func (kp *Kinopoisk) Releases(countries, genres []string, month int) []Film {
-	films := make([]Film, 0)
+func (kp *Kinopoisk) Releases(countries, genres []string, month int) Films {
+	films := make(Films, 0)
 	p := kp.releasesFirstPageAndToken(month)
 	films = append(films, kp.parseReleasesPage(p)...)
 
@@ -50,7 +50,7 @@ func (kp *Kinopoisk) Releases(countries, genres []string, month int) []Film {
 		return films
 	}
 
-	res := make([]Film, 0)
+	res := make(Films, 0)
 
 	for _, film := range films {
 
@@ -121,7 +121,7 @@ func (kp *Kinopoisk) releasesNextPage(month, page int) []byte {
 	return utility.BytesFromReader(resp.Body)
 }
 
-func (kp *Kinopoisk) parseReleasesPage(page []byte) []Film {
+func (kp *Kinopoisk) parseReleasesPage(page []byte) Films {
 	// wd, err := os.Getwd()
 	// if err != nil {
 	// 	log.Fatal(err)
@@ -138,7 +138,7 @@ func (kp *Kinopoisk) parseReleasesPage(page []byte) []Film {
 	sel := doc.Find(".prem_list")
 	items := sel.Eq(1).Find(".premier_item")
 
-	var res []Film
+	var res Films
 
 	for i := 0; i < items.Size(); i++ {
 		rd, ok := items.Eq(i).Find(`[itemprop="startDate"]`).Attr("content")
