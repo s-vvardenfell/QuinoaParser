@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"parser/utility"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -23,9 +25,10 @@ type SeriesInfo struct {
 
 type KinoAfisha struct {
 	client *http.Client
+	proxy  []string
 }
 
-func New() *KinoAfisha {
+func New(Proxy []string) *KinoAfisha {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		logrus.Fatalf("got error while creating cookie jar, %v", err)
@@ -37,6 +40,8 @@ func New() *KinoAfisha {
 		Jar:       jar,
 		Timeout:   20 * time.Second,
 	}
+
+	bot.proxy = Proxy
 	return &bot
 }
 
@@ -51,25 +56,48 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 	b := utility.BytesFromReader(resp.Body)
 
 	sl := processSearchResults(b)
-
 	res := make([]SeriesInfo, 0, len(sl))
+	np := nextProxy(k.proxy)
 
+	var wg sync.WaitGroup
 	for name, ref := range sl {
-		ref, _, _ = strings.Cut(ref, "/seasons")
-		resp := utility.DoRequest(
-			k.client, //мб нужно создавать нового клиента/исп-ть новые прокси
-			http.MethodGet,
-			ref,
-			nil,
-		)
+		wg.Add(1)
+		go func(name, ref string) {
 
-		defer resp.Body.Close()
-		b := utility.BytesFromReader(resp.Body)
+			ref, _, _ = strings.Cut(ref, "/seasons")
 
-		si := processSeriesPage(b)
-		si.Name = name
-		res = append(res, si)
+			proxyURL, err := url.Parse("http://" + np())
+			if err != nil {
+				logrus.Fatalf("cannot parse proxy, %v", err)
+			}
+
+			//возможно, существует лучший способ исп-я прокси
+			client := &http.Client{
+				Transport: &http.Transport{
+					Proxy: http.ProxyURL(proxyURL),
+				},
+				Timeout: 20 * time.Second,
+			}
+
+			// fmt.Printf("Запрос на %s, прокси %s\n\n", ref, np())
+			resp := utility.DoRequest(
+				client,
+				http.MethodGet,
+				ref,
+				nil,
+			)
+
+			defer resp.Body.Close()
+
+			b := utility.BytesFromReader(resp.Body)
+			si := processSeriesPage(b)
+			si.Name = name
+			res = append(res, si)
+
+			wg.Done()
+		}(name, ref)
 	}
+	wg.Wait()
 	return res
 }
 
@@ -116,4 +144,15 @@ func processSeriesPage(page []byte) SeriesInfo {
 	descr, _, _ = strings.Cut(descr, "Еще")
 	si.Descr = strings.TrimSpace(descr)
 	return si
+}
+
+func nextProxy(px []string) func() string {
+	i := 0
+	return func() string {
+		i++
+		if i == len(px) {
+			i = 0
+		}
+		return px[i]
+	}
 }

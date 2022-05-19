@@ -1,3 +1,4 @@
-resources/*.yaml
+resources/config.yml
+resources/config.yaml
 resources/*.htm
 logs/*.htm

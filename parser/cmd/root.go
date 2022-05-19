@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"parser/kinopoisk"
+	"parser/kinoafisha"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
@@ -32,8 +32,15 @@ var rootCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Parser started...")
-		kp := kinopoisk.New()
-		fmt.Println(kp.Releases([]string{"США"}, []string{"ужасы"}, 5))
+		// fmt.Println(cnfg)
+		// for p := cnfg.Platforms{
+
+		// }
+
+		ka := kinoafisha.New(cnfg.Proxy)
+		res := ka.ParseSeriesCalendar()
+
+		fmt.Println(res)
 	},
 }
 
@@ -47,7 +54,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile,
-		"config", "", "config file (default is resources/config.yaml)")
+		"config", "", "config file (default is resources/config.yml)")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -60,12 +67,11 @@ func initConfig() {
 
 		viper.AddConfigPath(filepath.Join(wd, "resources"))
 		viper.SetConfigName("config")
-		viper.SetConfigType("yaml")
+		viper.SetConfigType("yml")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
 
-	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	} else {
