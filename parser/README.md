@@ -1,5 +1,10 @@
 # parser
-Service with that parses data from config-specified platforms<br>
+Service that collects information about movies or series<br>
+
+Platforms:<br>
+:heavy_check_mark: kinopoisk<br>
+:heavy_check_mark: kinoafisha<br>
+:white_large_square: imdb<br>
 
 Config example:<br>
 ```yaml
@@ -14,7 +19,7 @@ logrus:
 platforms:
   - kinoafisha
   - kinopoisk
-  - imdb
+  #- imdb
 -proxy:
   - login:passw@addr:port
 ```
