@@ -15,8 +15,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	calendarUrl = "https://www.kinoafisha.info/series/calendar/"
+)
+
+//ключ - название, значение - ссылка; избегаем копий
 type SeriesList map[string]string
 
+//содержит данные о сериале со страницы сериала
 type SeriesInfo struct {
 	Name  string
 	Descr string
@@ -49,7 +55,7 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 	resp := utility.DoRequest(
 		k.client,
 		http.MethodGet,
-		"https://www.kinoafisha.info/series/calendar/",
+		calendarUrl,
 		nil,
 	)
 	defer resp.Body.Close()
@@ -63,9 +69,10 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 	for name, ref := range sl {
 		wg.Add(1)
 		go func(name, ref string) {
-
+			//формируем нужный урл
 			ref, _, _ = strings.Cut(ref, "/seasons")
 
+			//получаем прокси-урл
 			proxyURL, err := url.Parse("http://" + np())
 			if err != nil {
 				logrus.Fatalf("cannot parse proxy, %v", err)
@@ -79,7 +86,7 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 				Timeout: 20 * time.Second,
 			}
 
-			// fmt.Printf("Запрос на %s, прокси %s\n\n", ref, np())
+			// fmt.Printf("Запрос на урл %s, прокси %s\n\n", ref, np())
 			resp := utility.DoRequest(
 				client,
 				http.MethodGet,
@@ -89,6 +96,7 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 
 			defer resp.Body.Close()
 
+			//получаем и собираем данные
 			b := utility.BytesFromReader(resp.Body)
 			si := processSeriesPage(b)
 			si.Name = name
@@ -101,6 +109,7 @@ func (k *KinoAfisha) ParseSeriesCalendar() []SeriesInfo {
 	return res
 }
 
+//собирает все уникальные пары названия + урл со страницы
 func processSearchResults(page []byte) SeriesList {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(page))
 	if err != nil {
@@ -110,11 +119,11 @@ func processSearchResults(page []byte) SeriesList {
 	series := doc.Find(".seriesList_item")
 	result := make(map[string]string)
 
-	for i := 0; i < 10; /*series.Size()*/ i++ {
+	for i := 0; i < 10; /*series.Size()*/ i++ { //DEBUG
 		title := series.Eq(i).Find(".seriesList_name").Text()
-		title, _, _ = strings.Cut(title, "/")
+		title, _, _ = strings.Cut(title, "/") //название
 
-		ref, ok := series.Eq(i).Find(".seriesList_ref").Attr("href")
+		ref, ok := series.Eq(i).Find(".seriesList_ref").Attr("href") //ссылка
 		if !ok {
 			logrus.Warningf("cannot find ref for %s", title)
 		}
@@ -123,6 +132,7 @@ func processSearchResults(page []byte) SeriesList {
 	return result
 }
 
+//собирает информацию со страницы конкретного сериала
 func processSeriesPage(page []byte) SeriesInfo {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(page))
 	if err != nil {
@@ -146,6 +156,7 @@ func processSeriesPage(page []byte) SeriesInfo {
 	return si
 }
 
+//выдает следующий прокси для каждого запроса
 func nextProxy(px []string) func() string {
 	i := 0
 	return func() string {
