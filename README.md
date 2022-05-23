@@ -1,4 +1,4 @@
-# parser
+# Quinoa
 Service that collects information about movies or series<br>
 
 Platforms:<br>
