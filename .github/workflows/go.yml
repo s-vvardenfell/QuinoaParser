@@ -19,7 +19,7 @@ jobs:
         go-version: 1.18
         
     - name: Vet
-      run: go vet
+      run: cd parser & go vet
 
     - name: Build
       run: cd parser & go build -v ./...
