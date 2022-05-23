@@ -1,4 +1,6 @@
-# Quinoa
+# Quinoa<br>
+[![build-test](https://github.com/s-vvardenfell/Quinoa/actions/workflows/build-test.yml/badge.svg)](https://github.com/s-vvardenfell/Quinoa/actions/workflows/build-test.yml) [![golangci-lint](https://github.com/s-vvardenfell/Quinoa/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/s-vvardenfell/Quinoa/actions/workflows/golangci-lint.yml)<br>
+
 Service that collects information about movies or series<br>
 
 Platforms:<br>
