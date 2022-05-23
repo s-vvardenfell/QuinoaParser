@@ -1,31 +1,29 @@
 package utility
 
 import (
-	"os"
-	"path/filepath"
-	"strconv"
-	"time"
+	"io"
+	"net/http"
+
+	"github.com/sirupsen/logrus"
 )
 
-func PrepareForTest(nestedPkg bool) (tempDir string, resourceDir string, tempFileName string, err error) {
-	wd, err := os.Getwd()
+func DoRequest(client *http.Client, method, url string, body io.Reader) *http.Response {
+	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return "", "", "", err
+		logrus.Fatalf("cannot create NewRequest to %s, %v", url, err)
 	}
 
-	//get temp/resource dir
-	if nestedPkg {
-		tempDir = filepath.Join(filepath.Join(filepath.Dir(wd), "../"), "temp")
-		resourceDir = filepath.Join(filepath.Join(filepath.Dir(wd), "../"), "resources")
-	} else {
-		tempDir = filepath.Join(filepath.Dir(wd), "temp")
-		resourceDir = filepath.Join(filepath.Dir(wd), "resources")
+	resp, err := client.Do(req)
+	if err != nil {
+		logrus.Fatalf("cannot get %s, %v", url, err)
 	}
+	return resp
+}
 
-	tempFileName = filepath.Join(tempDir, time.Now().Format("02-01-2006_15-04-05")+".txt") //create temp file to upload
-	tempFileContent := strconv.Itoa(int(time.Now().Unix()))                                //fill temp file with content
-	if err = os.WriteFile(tempFileName, []byte(tempFileContent), 0666); err != nil {
-		return "", "", "", err
+func BytesFromReader(r io.Reader) []byte {
+	byteValue, err := io.ReadAll(r)
+	if err != nil {
+		logrus.Fatalf("error reading in BytesFromReader(), %v", err)
 	}
-	return tempDir, resourceDir, tempFileName, nil
+	return byteValue
 }
