@@ -6,10 +6,6 @@ package main
 
 import "parser/cmd"
 
-type P struct {
-	Proxy []string
-}
-
 func main() {
 	cmd.Execute()
 }

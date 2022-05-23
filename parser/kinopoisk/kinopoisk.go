@@ -15,7 +15,6 @@ import (
 )
 
 const timeout = 20
-const mainIrl = "https://www.kinopoisk.ru/"
 
 type Kinopoisk struct {
 	client *http.Client
