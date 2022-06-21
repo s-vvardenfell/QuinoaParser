@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"parser/kinoafisha"
+	"parser/platform"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
@@ -37,10 +37,8 @@ var rootCmd = &cobra.Command{
 
 		// }
 
-		ka := kinoafisha.New(cnfg.Proxy)
-		res := ka.ParseSeriesCalendar()
-
-		fmt.Println(res)
+		p := platform.New()
+		p.SearchByCondition(nil)
 	},
 }
 
