@@ -3,6 +3,7 @@ package platform
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -10,6 +11,19 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"github.com/sirupsen/logrus"
 )
+
+const (
+	mainUrl     = "www.kinopoisk.ru" // В КОНФИГ
+	queryUrl    = "www.kinopoisk.ru/s/index.php"
+	searchUrl   = "https://www.kinopoisk.ru/s/"
+	imgUrlTempl = "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
+)
+
+type Result struct {
+	Name   string
+	Ref    string
+	ImgUrl string //нужно еще сдеать GET и получить картинку
+}
 
 //ВЫНЕСТИ
 type Condition struct {
@@ -28,25 +42,24 @@ func New() *Platform {
 	return &Platform{}
 }
 
-const (
-	mainUrl   = "www.kinopoisk.ru" // В КОНФИГ
-	queryUrl  = "www.kinopoisk.ru/s/index.php"
-	searchUrl = "https://www.kinopoisk.ru/s/"
-)
-
 /*
 TODO
 - РАБОТАТЬ В ДРУГОЙ ВЕТКЕ на винде
+- обработать стр 97 возврат если там капча
+	по сути маршаллить ни во что не надо, это сделает grpc
+- SearchByCondition возвращает результат []byte или return parsePage(page), где тип - готовый json?
+	SearchByCondition все-таки будет вызываться по grpc, нет смысла делать Work()
 - можно уведмолять в тг / редис-сообщение (подписка), если весь круг капч прошел, но результата все нет
 - проверить, может ли быть неск кл слов и добавить цикл в таком случае
-- прокси
-	- мб понадобится решение капчи - отдельный сервис?
+- мб понадобится решение капчи - отдельный сервис?
 - конфиг для этой площадки
 - остальные мб убрать
 - сделать тест, чтобы prepareUrl возвращал корректный урл, сравнивать с урлами из логов
+
+ТЕСТЫ!
 */
 
-func (p *Platform) SearchByCondition(c *Condition) []byte {
+func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 	c = &Condition{ //ПРИМЕР
 		Keyword:  "NAME",
 		Type:     "фильм",
@@ -56,6 +69,7 @@ func (p *Platform) SearchByCondition(c *Condition) []byte {
 		Coutries: []string{"США"},
 	}
 
+	// заходим на страницу поиска, там перечисления для запроса, типа США это "1" и тд (для стран и жанров)
 	req := gorequest.New()
 	resp, body, errs := req.Get(searchUrl).End()
 	for i := range errs {
@@ -64,27 +78,27 @@ func (p *Platform) SearchByCondition(c *Condition) []byte {
 		}
 	}
 
+	// если редирект на решение капчи, меняем прокси и делаем новый запрос
 	for strings.Contains(resp.Request.URL.String(), "captcha") {
-		//смена прокси / решение капчи
-		//написать ф-ю на подачу следующей капчи
-		reqWithProxy := gorequest.New().Proxy("http://CveAzQG5:5XLvvTcV@45.140.63.156:53023") //брать из цикла-замыкания по конфигу каждый раз новую
+		p := nextProxy(proxie)
+		reqWithProxy := gorequest.New().Proxy("http://" + p())
 		resp, body, errs = reqWithProxy.Get(searchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
 				logrus.Errorf("error(%d) while getting %s, %v", i, searchUrl, errs[i])
 			}
 		}
-		time.Sleep(time.Second * 5) //TODO из конфига
+		time.Sleep(time.Second * 5)
 	}
 
 	// os.WriteFile("temp/search_page.htm", []byte(body), 0644)
 	// body, _ := os.ReadFile("temp/search_page.htm")
 
 	url := prepareUrl(c, string(body))
-	fmt.Println(url)
-	// req := gorequest.New()
-	// resp, body, errs = req.Get(url).End()
-	// fmt.Println(resp, "\n\n\n", body, errs)
+	resp, body, errs = req.Get(url).End() //проверка ответа на капчу тут?
+	results := processPage(body)
+
+	fmt.Println(results)
 	return nil
 }
 
@@ -182,4 +196,50 @@ func typeByName(in string) string {
 		return "film"
 	}
 	return ""
+}
+
+// возвращает следующий прокси из списка/конфига
+func nextProxy(proxies []string) func() string {
+	i := 0
+	return func() string {
+		i++
+		if i >= len(proxies) {
+			i = 0
+		}
+		return proxies[i]
+	}
+}
+
+// ищет нужные данные на странице
+func processPage(page string) []Result {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
+	if err != nil {
+		logrus.Errorf("cannot create NewDocumentFromReader, %v", err)
+	}
+
+	elems := doc.Find("#block_left_pad > div > div.search_results.search_results_last > div")
+	res := make([]Result, 0, elems.Size())
+
+	for i := 1; i < elems.Size(); i++ {
+		nameElem := elems.Eq(i).Find(".name > a")
+		name := nameElem.Text()
+		ref, ok := nameElem.Attr("href")
+		if !ok {
+			ref = "Нет"
+		}
+		if !strings.Contains(ref, "https") {
+			ref = "https://" + mainUrl + ref
+		}
+
+		id := strings.TrimSuffix(ref, "/sr/1/")
+		id = path.Base(id)
+		imgUrl := fmt.Sprintf(imgUrlTempl, id)
+
+		res = append(res, Result{
+			Name:   name,
+			Ref:    ref,
+			ImgUrl: imgUrl,
+		})
+	}
+	return res
 }
