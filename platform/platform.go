@@ -1,8 +1,10 @@
 package platform
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/url"
+	"parser/config"
 	"path"
 	"strings"
 	"time"
@@ -12,53 +14,59 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	mainUrl     = "www.kinopoisk.ru" // В КОНФИГ
-	queryUrl    = "www.kinopoisk.ru/s/index.php"
-	searchUrl   = "https://www.kinopoisk.ru/s/"
-	imgUrlTempl = "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
-)
-
-type Result struct {
-	Name   string
-	Ref    string
-	ImgUrl string //нужно еще сдеать GET и получить картинку
-}
-
-//ВЫНЕСТИ
-type Condition struct {
-	Keyword  string
-	Type     string
-	Genres   []string
-	YearFrom string
-	YearTo   string
-	Coutries []string
-}
+// const (
+// 	mainUrl     = "www.kinopoisk.ru" // В КОНФИГ
+// 	queryUrl    = "www.kinopoisk.ru/s/index.php"
+// 	searchUrl   = "https://www.kinopoisk.ru/s/"
+// 	imgUrlTempl = "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
+// )
 
 type Platform struct {
+	MainUrl     string
+	QueryUrl    string
+	SearchUrl   string
+	ImgUrlTempl string
 }
 
-func New() *Platform {
-	return &Platform{}
+func New(c config.Config) *Platform {
+	m, _ := base64.StdEncoding.DecodeString(c.Urls.MainUrl)
+	q, _ := base64.StdEncoding.DecodeString(c.Urls.QueryUrl)
+	s, _ := base64.StdEncoding.DecodeString(c.Urls.SearchUrl)
+	i, _ := base64.StdEncoding.DecodeString(c.Urls.ImgUrlTempl)
+
+	return &Platform{
+		MainUrl:     string(m),
+		QueryUrl:    string(q),
+		SearchUrl:   string(s),
+		ImgUrlTempl: string(i),
+	}
 }
 
 /*
 TODO
-- РАБОТАТЬ В ДРУГОЙ ВЕТКЕ на винде
 - обработать стр 97 возврат если там капча
 	по сути маршаллить ни во что не надо, это сделает grpc
-- SearchByCondition возвращает результат []byte или return parsePage(page), где тип - готовый json?
-	SearchByCondition все-таки будет вызываться по grpc, нет смысла делать Work()
-- можно уведмолять в тг / редис-сообщение (подписка), если весь круг капч прошел, но результата все нет
-- проверить, может ли быть неск кл слов и добавить цикл в таком случае
-- мб понадобится решение капчи - отдельный сервис?
-- конфиг для этой площадки
-- остальные мб убрать
-- сделать тест, чтобы prepareUrl возвращал корректный урл, сравнивать с урлами из логов
 
+- еще сервисы:
+	- решение капчи
+	- уведомление в тг
+		вообще, можно уведомлятор в тг сделать как подписку на очередь в редисе
+
+- тесты на то что возвращается корректные ответы, просто прогнать вызов SearchByCondition с разными условиями
+- закодировать в конфиге урлы в б64, чтобы были не читаемы
+
+- тест для пакета конфиг - что всё маршаллится хорошо
+	для других сервисов тоже можно сделать
+
+
+main_url: "www.kinopoisk.ru"
+  query_url: "www.kinopoisk.ru/s/index.php"
+  search_url: "https://www.kinopoisk.ru/s/"
+  img_url_temp: "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
 ТЕСТЫ!
 */
 
+//мб должен возвр err
 func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 	c = &Condition{ //ПРИМЕР
 		Keyword:  "NAME",
@@ -71,39 +79,43 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 
 	// заходим на страницу поиска, там перечисления для запроса, типа США это "1" и тд (для стран и жанров)
 	req := gorequest.New()
-	resp, body, errs := req.Get(searchUrl).End()
+	resp, body, errs := req.Get(p.SearchUrl).End()
 	for i := range errs {
 		if errs[i] != nil {
-			logrus.Errorf("error(%d) while getting %s, %v", i, searchUrl, errs[i])
+			logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
 		}
 	}
 
 	// если редирект на решение капчи, меняем прокси и делаем новый запрос
 	for strings.Contains(resp.Request.URL.String(), "captcha") {
-		p := nextProxy(proxie)
-		reqWithProxy := gorequest.New().Proxy("http://" + p())
-		resp, body, errs = reqWithProxy.Get(searchUrl).End()
+		if proxie == nil {
+			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
+			return nil
+		}
+		prs := nextProxy(proxie)
+		reqWithProxy := gorequest.New().Proxy("http://" + prs())
+		resp, body, errs = reqWithProxy.Get(p.SearchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
-				logrus.Errorf("error(%d) while getting %s, %v", i, searchUrl, errs[i])
+				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
 			}
 		}
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 1)
 	}
 
 	// os.WriteFile("temp/search_page.htm", []byte(body), 0644)
 	// body, _ := os.ReadFile("temp/search_page.htm")
 
-	url := prepareUrl(c, string(body))
+	url := prepareUrl(c, string(body), p.MainUrl)
 	resp, body, errs = req.Get(url).End() //проверка ответа на капчу тут?
-	results := processPage(body)
+	results := processPage(body, p.MainUrl, p.ImgUrlTempl)
 
 	fmt.Println(results)
 	return nil
 }
 
 // возвращает подготовленный урл для запроса
-func prepareUrl(c *Condition, page string) string {
+func prepareUrl(c *Condition, page, mainUrl string) string {
 	u := url.URL{
 		Scheme: "https",
 		Host:   mainUrl,
@@ -140,9 +152,9 @@ func prepareUrl(c *Condition, page string) string {
 		}
 	}
 
-	q.Set("m_act[find]", c.Keyword) //цикл? - может ли быть несколько слов как параметры или все сразу идут?
+	q.Set("m_act[find]", c.Keyword)
 	u.RawQuery = q.Encode()
-	return strings.Replace(u.String(), "?", "/index.php?", 1) //no better solution found
+	return strings.Replace(u.String(), "?", "/index.php?", 1) // лучшего решения не придумал, url.Encode кодирует '/' и ':'
 }
 
 // возвращает номера стран вместо названий
@@ -211,7 +223,7 @@ func nextProxy(proxies []string) func() string {
 }
 
 // ищет нужные данные на странице
-func processPage(page string) []Result {
+func processPage(page, mainUrl, imgUrlTempl string) []Result {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
 	if err != nil {
 		logrus.Errorf("cannot create NewDocumentFromReader, %v", err)
