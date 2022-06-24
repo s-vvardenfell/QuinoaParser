@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"os"
 	"parser/config"
 	"path"
 	"strings"
@@ -13,13 +14,6 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"github.com/sirupsen/logrus"
 )
-
-// const (
-// 	mainUrl     = "www.kinopoisk.ru" // В КОНФИГ
-// 	queryUrl    = "www.kinopoisk.ru/s/index.php"
-// 	searchUrl   = "https://www.kinopoisk.ru/s/"
-// 	imgUrlTempl = "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
-// )
 
 type Platform struct {
 	MainUrl     string
@@ -44,8 +38,8 @@ func New(c config.Config) *Platform {
 
 /*
 TODO
-- обработать стр 97 возврат если там капча
-	по сути маршаллить ни во что не надо, это сделает grpc
+- сделать break и возврат ошибки, если прошелся по всем прокси и не получил результата
+- цикл с капчей сделать как-то покрасивее
 
 - еще сервисы:
 	- решение капчи
@@ -58,12 +52,6 @@ TODO
 - тест для пакета конфиг - что всё маршаллится хорошо
 	для других сервисов тоже можно сделать
 
-
-main_url: "www.kinopoisk.ru"
-  query_url: "www.kinopoisk.ru/s/index.php"
-  search_url: "https://www.kinopoisk.ru/s/"
-  img_url_temp: "https://www.kinopoisk.ru/images/sm_film/%s.jpg"
-ТЕСТЫ!
 */
 
 //мб должен возвр err
@@ -87,7 +75,14 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 	}
 
 	// если редирект на решение капчи, меняем прокси и делаем новый запрос
+	counter := 0
 	for strings.Contains(resp.Request.URL.String(), "captcha") {
+		logrus.Warning("got captcha, try to use proxie")
+
+		if counter == len(proxie)-1 {
+			logrus.Warning("all proxies has already in use")
+		}
+
 		if proxie == nil {
 			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
 			return nil
@@ -100,17 +95,54 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
 			}
 		}
+
 		time.Sleep(time.Second * 1)
+		counter++
 	}
 
 	// os.WriteFile("temp/search_page.htm", []byte(body), 0644)
 	// body, _ := os.ReadFile("temp/search_page.htm")
 
 	url := prepareUrl(c, string(body), p.MainUrl)
-	resp, body, errs = req.Get(url).End() //проверка ответа на капчу тут?
+	resp, body, errs = req.Get(url).End()
+	for i := range errs {
+		if errs[i] != nil {
+			logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
+		}
+	}
+
+	counter = 0
+	for resp.StatusCode != 200 || strings.Contains(resp.Request.URL.String(), "captcha") {
+		logrus.Warning("got captcha, try to use proxie")
+
+		if proxie == nil {
+			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
+			return nil
+		}
+
+		if counter == len(proxie)-1 {
+			logrus.Warning("all proxies has already in use")
+		}
+
+		prs := nextProxy(proxie)
+		reqWithProxy := gorequest.New().Proxy("http://" + prs())
+		resp, body, errs = reqWithProxy.Get(url).End()
+		for i := range errs {
+			if errs[i] != nil {
+				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
+			}
+		}
+		time.Sleep(time.Second * 1)
+		counter++
+	}
+
 	results := processPage(body, p.MainUrl, p.ImgUrlTempl)
 
-	fmt.Println(results)
+	for i := range results {
+		fmt.Println(results[i].Name, results[i].Ref, results[i].ImgUrl)
+		os.WriteFile(fmt.Sprintf("temp/%d.jpg", i), []byte(results[i].Img), 0644)
+	}
+
 	return nil
 }
 
@@ -247,10 +279,31 @@ func processPage(page, mainUrl, imgUrlTempl string) []Result {
 		id = path.Base(id)
 		imgUrl := fmt.Sprintf(imgUrlTempl, id)
 
+		req := gorequest.New()
+		resp, body, errs := req.Get(imgUrl).End()
+		for i := range errs {
+			if errs[i] != nil {
+				logrus.Errorf("error(%d) while getting %s, %v", i, imgUrl, errs[i])
+			}
+		}
+
+		if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "image") {
+			logrus.Warningf("error while getting image for id %s: resp.code: %d, cont.type: %s",
+				id, resp.StatusCode, resp.Header.Get("Content-Type"))
+
+			noImg, err := os.ReadFile("resources/no_image.jpg")
+			if err != nil {
+				logrus.Error("cannot read 'no_image.jpg'")
+			}
+
+			body = base64.StdEncoding.EncodeToString(noImg)
+		}
+
 		res = append(res, Result{
 			Name:   name,
 			Ref:    ref,
 			ImgUrl: imgUrl,
+			Img:    body,
 		})
 	}
 	return res
