@@ -14,7 +14,10 @@
 
 # Dependency directories (remove the comment below to include it)
 .env
-log/
-resources/config.go
-TODO
 
+# Other
+log/
+temp/
+resources/config.yml
+TODO
+desktop.ini
