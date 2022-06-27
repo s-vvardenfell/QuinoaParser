@@ -27,7 +27,6 @@ func New(c config.Config) *Platform {
 	q, _ := base64.StdEncoding.DecodeString(c.Urls.QueryUrl)
 	s, _ := base64.StdEncoding.DecodeString(c.Urls.SearchUrl)
 	i, _ := base64.StdEncoding.DecodeString(c.Urls.ImgUrlTempl)
-
 	return &Platform{
 		MainUrl:     string(m),
 		QueryUrl:    string(q),
@@ -39,7 +38,6 @@ func New(c config.Config) *Platform {
 /*
 TODO
 - протестить получение картинки с новой логикой!
-- если ф-я на получение новых прокси работает корректно, почему в реальных запросах всегда 1 прокся?????????
 
 - сделать break и возврат ошибки, если прошелся по всем прокси и не получил результата
 - цикл с капчей сделать как-то покрасивее
@@ -59,21 +57,10 @@ TODO
 - прибраться в cmd - Long: `Usage: quinoa и тд
 - ЛИНТЕР! / vet
 
-- grpc
-
 */
 
 //мб должен возвр err
 func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
-	// c = &Condition{ //ПРИМЕР
-	// 	Keyword:  "NAME",
-	// 	Type:     "фильм",
-	// 	Genres:   []string{"боевик"},
-	// 	YearFrom: "2021",
-	// 	YearTo:   "2023",
-	// 	Coutries: []string{"США"},
-	// }
-
 	// заходим на страницу поиска, там перечисления для запроса, типа США это "1" и тд (для стран и жанров)
 	req := gorequest.New()
 	resp, body, errs := req.Get(p.SearchUrl).End()
@@ -85,6 +72,8 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 
 	// если редирект на решение капчи, меняем прокси и делаем новый запрос
 	counter := 0
+	prs := nextProxy(proxie)
+
 	for strings.Contains(resp.Request.URL.String(), "captcha") {
 		logrus.Warning("got captcha, try to use proxie")
 
@@ -97,10 +86,11 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
 			return nil
 		}
-		prs := nextProxy(proxie)
-		prxy := prs()
-		fmt.Println(prxy)
-		reqWithProxy := gorequest.New().Proxy("http://" + prxy)
+
+		proxy := prs()
+		logrus.Info("Proxy in use: ", proxy)
+
+		reqWithProxy := gorequest.New().Proxy("http://" + proxy)
 		resp, body, errs = reqWithProxy.Get(p.SearchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
@@ -134,8 +124,10 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 			counter = 0
 		}
 
-		prs := nextProxy(proxie)
-		reqWithProxy := gorequest.New().Proxy("http://" + prs())
+		proxy := prs()
+		logrus.Info("Proxy in use: ", proxy)
+
+		reqWithProxy := gorequest.New().Proxy("http://" + proxy)
 		resp, body, errs = reqWithProxy.Get(url).End()
 		for i := range errs {
 			if errs[i] != nil {
