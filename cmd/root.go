@@ -2,14 +2,18 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"parser/config"
-	"parser/platform"
+	"parser/generated"
+	"parser/parser_server"
 	"path/filepath"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var cfgFile string
@@ -36,9 +40,36 @@ var rootCmd = &cobra.Command{
 		if cnfg.Localhost {
 			os.Setenv("HTTPS_PROXY", "http://127.0.0.1:8888")
 		}
+		///////////////////////////////////////////////////////////
+		// p := platform.New(cnfg)
 
-		p := platform.New(cnfg)
-		p.SearchByCondition(nil, cnfg.Proxy)
+		// cond := &platform.Condition{
+		// 	Keyword:  "NAME",
+		// 	Type:     "фильм",
+		// 	Genres:   []string{"боевик"},
+		// 	YearFrom: "2021",
+		// 	YearTo:   "2023",
+		// 	Coutries: []string{"США"},
+		// }
+		// fmt.Println(p.SearchByCondition(cond, cnfg.Proxy))
+		///////////////////////////////////////////////////////////
+		grpcServ := grpc.NewServer()
+		pServ := parser_server.New(cnfg)
+		generated.RegisterParserServiceServer(grpcServ, pServ)
+
+		lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", cnfg.ServerHost, cnfg.ServerPort))
+		if err != nil {
+			logrus.Fatalf("failed to listen: %v", err)
+		}
+
+		if cnfg.WithReflection {
+			reflection.Register(grpcServ)
+		}
+
+		logrus.Info("Starting gRPC listener on port " + cnfg.ServerPort)
+		if err := grpcServ.Serve(lis); err != nil {
+			logrus.Fatalf("failed to serve: %v", err)
+		}
 	},
 }
 

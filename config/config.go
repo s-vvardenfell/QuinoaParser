@@ -1,12 +1,13 @@
 package config
 
 type Config struct {
-	Host      string   `mapstructure:"host"`
-	Port      string   `mapstructure:"port"`
-	Localhost bool     `mapstructure:"enable_localhost"`
-	Urls      Urls     `mapstructure:"urls"`
-	Logrus    Logrus   `mapstructure:"logrus"`
-	Proxy     []string `mapstructure:"proxy"`
+	ServerHost     string   `mapstructure:"server_host"`
+	ServerPort     string   `mapstructure:"server_port"`
+	WithReflection bool     `mapstructure:"with_reflection"`
+	Localhost      bool     `mapstructure:"enable_localhost"`
+	Urls           Urls     `mapstructure:"urls"`
+	Logrus         Logrus   `mapstructure:"logrus"`
+	Proxy          []string `mapstructure:"proxy"`
 }
 
 type Logrus struct {
