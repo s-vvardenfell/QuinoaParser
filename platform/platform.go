@@ -2,6 +2,7 @@ package platform
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,12 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/parnurzeal/gorequest"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	msgNoProxie       = "no proxie provided, cannot deal with captcha"
+	msgGotCaptcha     = "got captcha, try to use proxie"
+	msgAllProxieInUse = "all proxies has already in use"
 )
 
 type Platform struct {
@@ -37,36 +44,26 @@ func New(c config.Config) *Platform {
 
 /*
 TODO
-- протестить получение картинки с новой логикой!
-
-- сделать break и возврат ошибки, если прошелся по всем прокси и не получил результата
-- цикл с капчей сделать как-то покрасивее
-- что-то возвращать если ошибка в цикле с прокси/просто гет запроса? пока просто пишу варнинг
-	например, в getImg есть только варниги, нет фаталов или возврата - что за бред?
 - проверка на "нет результатов" на странице поиска
-
-- возможно, стоит возвращать из все ф-й ошибки
-
-- еще сервисы: - это в общий TODO
-	- решение капчи
-	- уведомление в тг
-		вообще, можно уведомлятор в тг сделать как подписку на очередь в редисе
+- цикл с капчей сделать как-то покрасивее
 
 - тесты на то что возвращается корректные ответы, просто прогнать вызов SearchByCondition с разными условиями
-- для других сервисов тоже можно сделать тесты
 - прибраться в cmd - Long: `Usage: quinoa и тд
 - ЛИНТЕР! / vet
 
 */
 
-//мб должен возвр err
-func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
-	// заходим на страницу поиска, там перечисления для запроса, типа США это "1" и тд (для стран и жанров)
+func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, error) {
+	// заходим на страницу поиска, там перечисления для запроса,
+	// типа США это "1" и тд (для стран и жанров)
 	req := gorequest.New()
 	resp, body, errs := req.Get(p.SearchUrl).End()
 	for i := range errs {
 		if errs[i] != nil {
-			logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
+			logrus.Errorf(
+				"error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
+			return nil, fmt.Errorf(
+				"cannot get %s without proxies (request conditions: %#v)", p.SearchUrl, *c)
 		}
 	}
 
@@ -75,26 +72,27 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 	prs := nextProxy(proxie)
 
 	for strings.Contains(resp.Request.URL.String(), "captcha") {
-		logrus.Warning("got captcha, try to use proxie")
+		logrus.Warning(msgGotCaptcha)
+
+		if proxie == nil {
+			logrus.Warning(msgNoProxie)
+			return nil, errors.New(msgNoProxie)
+		}
 
 		if counter == len(proxie)-1 {
-			logrus.Warning("all proxies has already in use")
+			logrus.Warning(msgAllProxieInUse)
 			counter = 0
 		}
 
-		if proxie == nil {
-			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
-			return nil
-		}
-
 		proxy := prs()
-		logrus.Info("Proxy in use: ", proxy)
+		logrus.Info("proxy in use: ", proxy)
 
 		reqWithProxy := gorequest.New().Proxy("http://" + proxy)
 		resp, body, errs = reqWithProxy.Get(p.SearchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
 				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
+				return nil, fmt.Errorf("cannot get %s with proxies (request conditions: %#v)", p.SearchUrl, *c)
 			}
 		}
 
@@ -112,26 +110,27 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 
 	counter = 0
 	for resp.StatusCode != 200 || strings.Contains(resp.Request.URL.String(), "captcha") {
-		logrus.Warning("got captcha, try to use proxie")
+		logrus.Warning(msgGotCaptcha)
 
 		if proxie == nil {
-			logrus.Warning("no proxies provided, cannot deal with captcha") //мб возвращать err, чтобы передать в grpc
-			return nil
+			logrus.Warning(msgNoProxie)
+			return nil, errors.New(msgNoProxie)
 		}
 
 		if counter == len(proxie)-1 {
-			logrus.Warning("all proxies has already in use")
+			logrus.Warning(msgAllProxieInUse)
 			counter = 0
 		}
 
 		proxy := prs()
-		logrus.Info("Proxy in use: ", proxy)
+		logrus.Info("proxy in use: ", proxy)
 
 		reqWithProxy := gorequest.New().Proxy("http://" + proxy)
 		resp, body, errs = reqWithProxy.Get(url).End()
 		for i := range errs {
 			if errs[i] != nil {
-				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
+				logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
+				return nil, fmt.Errorf("cannot get %s with proxies (request conditions: %#v)", url, *c)
 			}
 		}
 
@@ -139,16 +138,12 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
 		counter++
 	}
 
-	// for i := range results {
-	// 	fmt.Println(results[i].Name, results[i].Ref, results[i].ImgUrl)
-	// 	os.WriteFile(fmt.Sprintf("temp/%d.jpg", i), []byte(results[i].Img), 0644)
-	// }
 	res := processPage(body, p.MainUrl, p.ImgUrlTempl)
 	for i := range res {
 		res[i].Img = getImg(res[i].ImgUrl)
 	}
 
-	return res
+	return res, nil
 }
 
 // возвращает подготовленный урл для запроса

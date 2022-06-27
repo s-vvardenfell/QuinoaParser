@@ -5,6 +5,9 @@ import (
 	"parser/config"
 	gen "parser/generated"
 	"parser/platform"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type ParserServer struct {
@@ -22,14 +25,19 @@ func New(cnfg config.Config) *ParserServer {
 
 func (ps *ParserServer) SearchData(
 	ctx context.Context, in *gen.Conditions) (*gen.ParsedResults, error) {
-	searchRes := ps.p.SearchByCondition(&platform.Condition{
+	searchRes, err := ps.p.SearchByCondition(&platform.Condition{
 		Keyword:  in.Keyword,
 		Type:     in.Type,
 		Genres:   in.Genres,
 		YearFrom: in.StartYear,
 		YearTo:   in.EndYear,
 		Coutries: in.Countries,
-	}, ps.cnfg.Proxy) //TODO RETURN ERRORS
+	}, ps.cnfg.Proxy)
+
+	if err != nil {
+		return nil, status.Errorf(codes.Internal,
+			"got error %v from Parser service, %v", err)
+	}
 
 	var pr gen.ParsedResults
 	for i := range searchRes {
@@ -39,5 +47,5 @@ func (ps *ParserServer) SearchData(
 			Img:  searchRes[i].Img,
 		})
 	}
-	return &pr, nil //TODO ERROR
+	return &pr, nil
 }
