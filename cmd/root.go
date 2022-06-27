@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"parser/config"
 	"parser/platform"
 	"path/filepath"
 
@@ -12,7 +13,7 @@ import (
 )
 
 var cfgFile string
-var cnfg Config
+var cnfg config.Config
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -32,13 +33,12 @@ var rootCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Parser started...")
-		// fmt.Println(cnfg)
-		// for p := cnfg.Platforms{
+		if cnfg.Localhost {
+			os.Setenv("HTTPS_PROXY", "http://127.0.0.1:8888")
+		}
 
-		// }
-
-		p := platform.New()
-		p.SearchByCondition(nil)
+		p := platform.New(cnfg)
+		p.SearchByCondition(nil, cnfg.Proxy)
 	},
 }
 

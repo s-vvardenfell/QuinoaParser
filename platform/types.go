@@ -3,10 +3,10 @@ package platform
 type Result struct {
 	Name   string
 	Ref    string
-	ImgUrl string //нужно еще сдеать GET и получить картинку
+	ImgUrl string
+	Img    string //string because gorequest returns the response body as a string - avoid multiple conversionsto []byte
 }
 
-//ВЫНЕСТИ
 type Condition struct {
 	Keyword  string
 	Type     string

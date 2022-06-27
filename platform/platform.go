@@ -38,32 +38,41 @@ func New(c config.Config) *Platform {
 
 /*
 TODO
+- протестить получение картинки с новой логикой!
+- если ф-я на получение новых прокси работает корректно, почему в реальных запросах всегда 1 прокся?????????
+
 - сделать break и возврат ошибки, если прошелся по всем прокси и не получил результата
 - цикл с капчей сделать как-то покрасивее
+- что-то возвращать если ошибка в цикле с прокси/просто гет запроса? пока просто пишу варнинг
+	например, в getImg есть только варниги, нет фаталов или возврата - что за бред?
+- проверка на "нет результатов" на странице поиска
 
-- еще сервисы:
+- возможно, стоит возвращать из все ф-й ошибки
+
+- еще сервисы: - это в общий TODO
 	- решение капчи
 	- уведомление в тг
 		вообще, можно уведомлятор в тг сделать как подписку на очередь в редисе
 
 - тесты на то что возвращается корректные ответы, просто прогнать вызов SearchByCondition с разными условиями
-- закодировать в конфиге урлы в б64, чтобы были не читаемы
+- для других сервисов тоже можно сделать тесты
+- прибраться в cmd - Long: `Usage: quinoa и тд
+- ЛИНТЕР! / vet
 
-- тест для пакета конфиг - что всё маршаллится хорошо
-	для других сервисов тоже можно сделать
+- grpc
 
 */
 
 //мб должен возвр err
-func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
-	c = &Condition{ //ПРИМЕР
-		Keyword:  "NAME",
-		Type:     "фильм",
-		Genres:   []string{"боевик"},
-		YearFrom: "2021",
-		YearTo:   "2023",
-		Coutries: []string{"США"},
-	}
+func (p *Platform) SearchByCondition(c *Condition, proxie []string) []Result {
+	// c = &Condition{ //ПРИМЕР
+	// 	Keyword:  "NAME",
+	// 	Type:     "фильм",
+	// 	Genres:   []string{"боевик"},
+	// 	YearFrom: "2021",
+	// 	YearTo:   "2023",
+	// 	Coutries: []string{"США"},
+	// }
 
 	// заходим на страницу поиска, там перечисления для запроса, типа США это "1" и тд (для стран и жанров)
 	req := gorequest.New()
@@ -81,6 +90,7 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 
 		if counter == len(proxie)-1 {
 			logrus.Warning("all proxies has already in use")
+			counter = 0
 		}
 
 		if proxie == nil {
@@ -88,7 +98,9 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 			return nil
 		}
 		prs := nextProxy(proxie)
-		reqWithProxy := gorequest.New().Proxy("http://" + prs())
+		prxy := prs()
+		fmt.Println(prxy)
+		reqWithProxy := gorequest.New().Proxy("http://" + prxy)
 		resp, body, errs = reqWithProxy.Get(p.SearchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
@@ -99,9 +111,6 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 		time.Sleep(time.Second * 1)
 		counter++
 	}
-
-	// os.WriteFile("temp/search_page.htm", []byte(body), 0644)
-	// body, _ := os.ReadFile("temp/search_page.htm")
 
 	url := prepareUrl(c, string(body), p.MainUrl)
 	resp, body, errs = req.Get(url).End()
@@ -122,6 +131,7 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 
 		if counter == len(proxie)-1 {
 			logrus.Warning("all proxies has already in use")
+			counter = 0
 		}
 
 		prs := nextProxy(proxie)
@@ -132,18 +142,21 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) []byte {
 				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
 			}
 		}
+
 		time.Sleep(time.Second * 1)
 		counter++
 	}
 
-	results := processPage(body, p.MainUrl, p.ImgUrlTempl)
-
-	for i := range results {
-		fmt.Println(results[i].Name, results[i].Ref, results[i].ImgUrl)
-		os.WriteFile(fmt.Sprintf("temp/%d.jpg", i), []byte(results[i].Img), 0644)
+	// for i := range results {
+	// 	fmt.Println(results[i].Name, results[i].Ref, results[i].ImgUrl)
+	// 	os.WriteFile(fmt.Sprintf("temp/%d.jpg", i), []byte(results[i].Img), 0644)
+	// }
+	res := processPage(body, p.MainUrl, p.ImgUrlTempl)
+	for i := range res {
+		res[i].Img = getImg(res[i].ImgUrl)
 	}
 
-	return nil
+	return res
 }
 
 // возвращает подготовленный урл для запроса
@@ -209,7 +222,7 @@ func genreNumberByName(genre, page string) string {
 	return res
 }
 
-func valueByLocator(coutry, page, locator string) (string, error) {
+func valueByLocator(val, page, locator string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
 	if err != nil {
 		logrus.Errorf("cannot create NewDocumentFromReader, %v", err)
@@ -218,17 +231,17 @@ func valueByLocator(coutry, page, locator string) (string, error) {
 	options := doc.Find(locator).Find("option")
 
 	if options.Size() == 0 {
-		return "", fmt.Errorf("cannot parse <%s> with locator <%s> on page", coutry, locator)
+		return "", fmt.Errorf("cannot parse <%s> with locator <%s> on page", val, locator)
 	}
 
 	for i := 0; i < options.Size(); i++ {
-		if strings.Contains(coutry, options.Eq(i).Text()) {
+		if strings.Contains(val, options.Eq(i).Text()) {
 			if val, ok := options.Eq(i).Attr("value"); ok {
 				return val, nil
 			}
 		}
 	}
-	return "", fmt.Errorf("not found values for <%s> with locator <%s> on page", coutry, locator)
+	return "", fmt.Errorf("not found values for <%s> with locator <%s> on page", val, locator)
 }
 
 // возвращает тип по запросу / части запроса
@@ -242,7 +255,7 @@ func typeByName(in string) string {
 	return ""
 }
 
-// возвращает следующий прокси из списка/конфига
+// возвращает следующий уникальный прокси из списка/конфига
 func nextProxy(proxies []string) func() string {
 	i := 0
 	return func() string {
@@ -279,32 +292,34 @@ func processPage(page, mainUrl, imgUrlTempl string) []Result {
 		id = path.Base(id)
 		imgUrl := fmt.Sprintf(imgUrlTempl, id)
 
-		req := gorequest.New()
-		resp, body, errs := req.Get(imgUrl).End()
-		for i := range errs {
-			if errs[i] != nil {
-				logrus.Errorf("error(%d) while getting %s, %v", i, imgUrl, errs[i])
-			}
-		}
-
-		if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "image") {
-			logrus.Warningf("error while getting image for id %s: resp.code: %d, cont.type: %s",
-				id, resp.StatusCode, resp.Header.Get("Content-Type"))
-
-			noImg, err := os.ReadFile("resources/no_image.jpg")
-			if err != nil {
-				logrus.Error("cannot read 'no_image.jpg'")
-			}
-
-			body = base64.StdEncoding.EncodeToString(noImg)
-		}
-
 		res = append(res, Result{
 			Name:   name,
 			Ref:    ref,
 			ImgUrl: imgUrl,
-			Img:    body,
 		})
 	}
 	return res
+}
+
+func getImg(imgUrl string) string {
+	req := gorequest.New()
+	resp, body, errs := req.Get(imgUrl).End()
+	for i := range errs {
+		if errs[i] != nil {
+			logrus.Errorf("error(%d) while getting %s, %v", i, imgUrl, errs[i])
+		}
+	}
+
+	if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "image") {
+		logrus.Warningf("error while getting image: resp.code: %d, cont.type: %s",
+			resp.StatusCode, resp.Header.Get("Content-Type"))
+
+		noImg, err := os.ReadFile("resources/no_image.jpg")
+		if err != nil {
+			logrus.Error("cannot read 'no_image.jpg'")
+		}
+
+		return base64.StdEncoding.EncodeToString(noImg)
+	}
+	return base64.StdEncoding.EncodeToString([]byte(body))
 }

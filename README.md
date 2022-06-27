@@ -13,15 +13,16 @@ Config example:<br>
 host: localhost
 port: 8080
 enable_localhost: false
+urls:
+  main_url: "main_url"
+  query_url: "query_url"
+  search_url: "search_url"
+  img_url_temp: "search_url"
 logrus:
   log_level: 4
   to_file: false
   to_json: false
   log_dir: "logs/logs.log"
-platforms:
-  - kinoafisha
-  - kinopoisk
-  #- imdb
--proxy:
-  - login:passw@addr:port
+proxy:
+  - login:passw@host:port
 ```
