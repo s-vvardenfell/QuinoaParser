@@ -105,7 +105,12 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 	for i := range errs {
 		if errs[i] != nil {
 			logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
+			return nil, fmt.Errorf("cannot get %s (request conditions: %#v)", url, *c)
 		}
+	}
+
+	if isNoResults(body) {
+		return nil, fmt.Errorf("no results found for request conditions: %#v", *c)
 	}
 
 	counter = 0
@@ -132,6 +137,10 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 				logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
 				return nil, fmt.Errorf("cannot get %s with proxies (request conditions: %#v)", url, *c)
 			}
+		}
+
+		if isNoResults(body) {
+			return nil, fmt.Errorf("no results found for request conditions: %#v", *c)
 		}
 
 		time.Sleep(time.Second * 1)
@@ -309,4 +318,14 @@ func getImg(imgUrl string) string {
 		return base64.StdEncoding.EncodeToString(noImg)
 	}
 	return base64.StdEncoding.EncodeToString([]byte(body))
+}
+
+func isNoResults(page string) bool {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(page))
+	if err != nil {
+		logrus.Errorf("cannot create NewDocumentFromReader, %v", err)
+	}
+
+	elem := doc.Find("h2").Text()
+	return strings.Contains(elem, "К сожалению")
 }
