@@ -231,7 +231,7 @@ func valueByLocator(val, page, locator string) (string, error) {
 	}
 
 	for i := 0; i < options.Size(); i++ {
-		if strings.Contains(val, options.Eq(i).Text()) {
+		if strings.Contains(options.Eq(i).Text(), val) {
 			if val, ok := options.Eq(i).Attr("value"); ok {
 				return val, nil
 			}

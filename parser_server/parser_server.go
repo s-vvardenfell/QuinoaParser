@@ -11,21 +11,21 @@ import (
 )
 
 type ParserServer struct {
-	p    *platform.Platform
+	pl   *platform.Platform
 	cnfg config.Config
 	gen.UnimplementedParserServiceServer
 }
 
 func New(cnfg config.Config) *ParserServer {
 	return &ParserServer{
-		p:    platform.New(cnfg),
+		pl:   platform.New(cnfg),
 		cnfg: cnfg,
 	}
 }
 
-func (ps *ParserServer) SearchData(
+func (ps *ParserServer) ParseData(
 	ctx context.Context, in *gen.Conditions) (*gen.ParsedResults, error) {
-	searchRes, err := ps.p.SearchByCondition(&platform.Condition{
+	searchRes, err := ps.pl.SearchByCondition(&platform.Condition{
 		Keyword:  in.Keyword,
 		Type:     in.Type,
 		Genres:   in.Genres,
