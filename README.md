@@ -1,6 +1,6 @@
 # QuinoaParser<br>
 
-[![build-test](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml/badge.svg)](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml) [![golangci-lint](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/golangci-lint.yml) <br>
+[![build-test](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml/badge.svg)](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml) <br>
 
 Service that collects information about movies or series<br>
 
