@@ -36,7 +36,7 @@ func (ps *ParserServer) ParseData(
 
 	if err != nil {
 		return nil, status.Errorf(codes.Internal,
-			"got error %v from Parser service, %v", err)
+			"got error from Parser service, %v", err)
 	}
 
 	var pr gen.ParsedResults

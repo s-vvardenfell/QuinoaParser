@@ -19,40 +19,16 @@ import (
 var cfgFile string
 var cnfg config.Config
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "quinoa",
-	Short: "Quinoa is a telegram bot server and parser",
-	Long: `Usage: quinoa --config <config_file_name.yaml>
-	Parsed platforms:
-	-kp
-	-im
-	-zn
-
-	API methods:
-	-1
-	-2
-	-3
-	`,
+	Use:   "parser",
+	Short: "Parser for Quinoa project",
 
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Parser started...")
+		logrus.Info("Parser started...")
 		if cnfg.Localhost {
 			os.Setenv("HTTPS_PROXY", "http://127.0.0.1:8888")
 		}
-		///////////////////////////////////////////////////////////
-		// p := platform.New(cnfg)
 
-		// cond := &platform.Condition{
-		// 	Keyword:  "NAME",
-		// 	Type:     "фильм",
-		// 	Genres:   []string{"боевик"},
-		// 	YearFrom: "2021",
-		// 	YearTo:   "2023",
-		// 	Coutries: []string{"США"},
-		// }
-		// fmt.Println(p.SearchByCondition(cond, cnfg.Proxy))
-		///////////////////////////////////////////////////////////
 		grpcServ := grpc.NewServer()
 		pServ := parser_server.New(cnfg)
 		generated.RegisterParserServiceServer(grpcServ, pServ)
@@ -86,7 +62,6 @@ func init() {
 		"config", "", "config file (default is resources/config.yml)")
 }
 
-// initConfig reads in config file and ENV variables if set.
 func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
@@ -99,7 +74,7 @@ func initConfig() {
 		viper.SetConfigType("yml")
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())

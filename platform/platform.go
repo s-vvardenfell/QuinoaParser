@@ -42,22 +42,16 @@ func New(c config.Config) *Platform {
 	}
 }
 
-/*
-TODO
-- проверка на "нет результатов" на странице поиска
-- цикл с капчей сделать как-то покрасивее
-
-- тесты на то что возвращается корректные ответы, просто прогнать вызов SearchByCondition с разными условиями
-- прибраться в cmd - Long: `Usage: quinoa и тд
-- ЛИНТЕР! / vet
-
-*/
-
 func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, error) {
-	// заходим на страницу поиска, там перечисления для запроса,
-	// типа США это "1" и тд (для стран и жанров)
-	req := gorequest.New()
+	// со страницы поиска получаем перечисления для поискового запроса
+	req := gorequest.New().
+		Set("Connection", "keep-alive").
+		Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko").
+		Set("Accept", "text/html, application/xhtml+xml, image/jxr, */*").
+		Set("Accept-Language", "ru-RU")
+
 	resp, body, errs := req.Get(p.SearchUrl).End()
+
 	for i := range errs {
 		if errs[i] != nil {
 			logrus.Errorf(
@@ -88,11 +82,13 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 		logrus.Info("proxy in use: ", proxy)
 
 		reqWithProxy := gorequest.New().Proxy("http://" + proxy)
+
 		resp, body, errs = reqWithProxy.Get(p.SearchUrl).End()
 		for i := range errs {
 			if errs[i] != nil {
 				logrus.Errorf("error(%d) while getting %s, %v", i, p.SearchUrl, errs[i])
-				return nil, fmt.Errorf("cannot get %s with proxies (request conditions: %#v)", p.SearchUrl, *c)
+				return nil, fmt.Errorf(
+					"cannot get %s with proxies (request conditions: %#v)", p.SearchUrl, *c)
 			}
 		}
 
@@ -100,8 +96,10 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 		counter++
 	}
 
+	// формируется запрос
 	url := prepareUrl(c, string(body), p.MainUrl)
 	resp, body, errs = req.Get(url).End()
+
 	for i := range errs {
 		if errs[i] != nil {
 			logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
@@ -109,6 +107,7 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 		}
 	}
 
+	// нет результатов по запросу
 	if isNoResults(body) {
 		return nil, fmt.Errorf("no results found for request conditions: %#v", *c)
 	}
@@ -135,7 +134,8 @@ func (p *Platform) SearchByCondition(c *Condition, proxie []string) ([]Result, e
 		for i := range errs {
 			if errs[i] != nil {
 				logrus.Errorf("error(%d) while getting %s, %v", i, url, errs[i])
-				return nil, fmt.Errorf("cannot get %s with proxies (request conditions: %#v)", url, *c)
+				return nil, fmt.Errorf(
+					"cannot get %s with proxies (request conditions: %#v)", url, *c)
 			}
 		}
 
@@ -242,6 +242,12 @@ func valueByLocator(val, page, locator string) (string, error) {
 
 // возвращает тип по запросу / части запроса
 func typeByName(in string) string {
+	if strings.Contains(in, "seri") { //serial, series
+		return "serial"
+	}
+	if strings.Contains(in, "file") {
+		return "film"
+	}
 	if strings.Contains(in, "сериал") {
 		return "serial"
 	}

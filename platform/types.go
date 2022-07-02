@@ -1,12 +1,14 @@
 package platform
 
+// результат парсинга
 type Result struct {
 	Name   string
 	Ref    string
 	ImgUrl string
-	Img    string //string because gorequest returns the response body as a string - avoid multiple conversionsto []byte
+	Img    string
 }
 
+// условия для поиска
 type Condition struct {
 	Keyword  string
 	Type     string
