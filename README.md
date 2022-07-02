@@ -1,23 +1,19 @@
 # QuinoaParser<br>
-[![build-test](https://github.com/s-vvardenfell/Quinoa/actions/workflows/build-test.yml/badge.svg)](https://github.com/s-vvardenfell/Quinoa/actions/workflows/build-test.yml) [![golangci-lint](https://github.com/s-vvardenfell/Quinoa/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/s-vvardenfell/Quinoa/actions/workflows/golangci-lint.yml)<br>
+
+[![build-test](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml/badge.svg)](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/build-test.yml) [![golangci-lint](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/s-vvardenfell/QuinoaParser/actions/workflows/golangci-lint.yml) <br>
 
 Service that collects information about movies or series<br>
-
-Platforms:<br>
-:heavy_check_mark: kinopoisk<br>
-:heavy_check_mark: kinoafisha<br>
-:white_large_square: imdb<br>
 
 Config example:<br>
 ```yaml
 host: localhost
 port: 8080
-enable_localhost: false
-urls:
-  main_url: "main_url"
-  query_url: "query_url"
-  search_url: "search_url"
-  img_url_temp: "search_url"
+enable_localhost: true
+urls: # b64-encoded to hide
+  main_url: "d3d3Lmtpbm9wb2lzay5ydQ=="
+  query_url: "d3d3Lmtpbm9wb2lzay5ydS9zL2luZGV4LnBocA=="
+  search_url: "aHR0cHM6Ly93d3cua2lub3BvaXNrLnJ1L3Mv"
+  img_url_temp: "aHR0cHM6Ly93d3cua2lub3BvaXNrLnJ1L2ltYWdlcy9zbV9maWxtLyVzLmpwZw=="
 logrus:
   log_level: 4
   to_file: false
